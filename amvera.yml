@@ -1,16 +1,13 @@
-# amvera.yml
-version: "1"
-
-services:
-  web:
-    build:
-      # Указываем, что проект на Python
-      runtime: python
-    # Команда запуска (аналог Procfile)
-    command: python bot.py
-    # Порт, который слушает ваше приложение
-    ports:
-      - 10000
-    # Переменные окружения (можно задать и в панели Amvera)
-    env:
-      - PORT=10000
+meta:
+  environment: python
+  toolchain:
+    name: pip
+    version: "3.11"
+build:
+  requirementsPath: requirements.txt
+  useCache: true
+run:
+  scriptName: Procfile
+  command: null
+  persistenceMount: /data
+  containerPort: "80"
