@@ -361,7 +361,6 @@ async def cors_middleware(request, handler):
     except web.HTTPException as ex:
         response = web.Response(status=ex.status, text=str(ex))
     
-    # Добавляем CORS заголовки
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
