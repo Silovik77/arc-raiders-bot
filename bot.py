@@ -381,11 +381,9 @@ async def main():
     await runner.setup()
     
     # Получаем порт из переменной окружения (Amvera использует PORT)
-    port = int(os.getenv("PORT", 10000))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    logger.info(f"Веб-сервер запущен на http://0.0.0.0:{port}")
-
+   port = int(os.getenv("PORT", 8080))
+site = web.TCPSite(runner, '0.0.0.0', port)
+logger.info(f"Веб-сервер запущен на http://0.0.0.0:{port}")
     # Запускаем фоновую задачу
     asyncio.create_task(check_streams_task())
 
