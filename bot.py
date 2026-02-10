@@ -9,7 +9,6 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiohttp import web
-from aiohttp_cors import setup, ResourceOptions
 
 # --- Загрузка переменных окружения ---
 load_dotenv()
@@ -35,7 +34,6 @@ dp = Dispatcher(storage=storage)
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
 TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
 
-
 def get_twitch_access_token():
     if not TWITCH_CLIENT_ID or not TWITCH_CLIENT_SECRET:
         logger.warning("Twitch API ключи не настроены.")
@@ -57,7 +55,6 @@ def get_twitch_access_token():
     except Exception as e:
         logger.error(f"Исключение при получении токена Twitch: {e}")
         return None
-
 
 def is_stream_live(twitch_username):
     token = get_twitch_access_token()
@@ -81,7 +78,6 @@ def is_stream_live(twitch_username):
         logger.error(f"Исключение при запросе к Twitch API: {e}")
         return False
 
-
 # --- Загрузка/сохранение данных стримеров ---
 def load_streamers():
     if os.path.exists(STREAMERS_FILE):
@@ -89,11 +85,9 @@ def load_streamers():
             return json.load(f)
     return {}
 
-
 def save_streamers(streamers):
     with open(STREAMERS_FILE, 'w', encoding='utf-8') as f:
         json.dump(streamers, f, ensure_ascii=False, indent=2)
-
 
 # --- URL API для ARC Raiders ---
 EVENT_SCHEDULE_API_URL = 'https://metaforge.app/api/arc-raiders/events-schedule'
@@ -121,7 +115,6 @@ MAP_TRANSLATIONS = {
     "Stella Montis": "Стелла Монти",
 }
 
-
 def get_arc_raiders_events_from_api_schedule():
     try:
         response = requests.get(EVENT_SCHEDULE_API_URL)
@@ -138,7 +131,6 @@ def get_arc_raiders_events_from_api_schedule():
     except Exception as e:
         logger.error(f"Ошибка при получении данных из API (events-schedule): {e}")
         return [], []
-
 
 def _get_events_exact(raw_events):
     active_events = []
@@ -198,7 +190,6 @@ def _get_events_exact(raw_events):
             continue
 
     return active_events, upcoming_events
-
 
 def _get_events_schedule(raw_events):
     active_events = []
@@ -290,7 +281,6 @@ def _get_events_schedule(raw_events):
 
     return active_events, upcoming_events
 
-
 # --- Обработчики команд и кнопок ---
 
 @dp.message(Command("start"))
@@ -304,7 +294,6 @@ async def cmd_start(message: types.Message):
     )
     logger.info("Сообщение с кнопкой Web App отправлено.")
 
-
 # --- API эндпоинты ---
 
 async def get_user_events(request):
@@ -315,28 +304,26 @@ async def get_user_events(request):
         logger.error(f"Ошибка в /api/user_events: {e}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
-
 async def register_streamer(request):
     try:
         data = await request.json()
         channel_id = data.get('channel_id')
         twitch_url = data.get('twitch_url')
-
+        
         if not channel_id or not twitch_url:
             return web.json_response({"error": "Missing channel_id or twitch_url"}, status=400)
-
+        
         streamers = load_streamers()
         streamers["temp_user"] = {
             "channel_id": channel_id,
             "twitch_url": twitch_url
         }
         save_streamers(streamers)
-
+        
         return web.json_response({"status": "success", "message": "Стример зарегистрирован!"})
     except Exception as e:
         logger.error(f"Ошибка в /api/register_streamer: {e}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
-
 
 # --- Фоновая задача: проверка стримов ---
 async def check_streams_task():
@@ -346,7 +333,7 @@ async def check_streams_task():
             for user_id, data in streamers.items():
                 channel_id = data.get('channel_id')
                 twitch_url = data.get('twitch_url', '')
-
+                
                 if 'twitch.tv/' in twitch_url:
                     username = twitch_url.split('/')[-1]
                     if is_stream_live(username):
@@ -359,38 +346,41 @@ async def check_streams_task():
                             logger.info(f"Уведомление отправлено в канал {channel_id} для стримера {user_id}")
                         except Exception as e:
                             logger.error(f"Ошибка при отправке уведомления: {e}")
-
-            await asyncio.sleep(300)  # Проверяем каждые 5 минут
-
+            
+            await asyncio.sleep(300) # Проверяем каждые 5 минут
+            
         except Exception as e:
             logger.error(f"Ошибка в фоновой задаче: {e}")
             await asyncio.sleep(60)
 
+# --- Middleware для CORS ---
+@web.middleware
+async def cors_middleware(request, handler):
+    try:
+        response = await handler(request)
+    except web.HTTPException as ex:
+        response = web.Response(status=ex.status, text=str(ex))
+    
+    # Добавляем CORS заголовки
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
 
 # --- Основная функция запуска ---
 async def main():
     logger.info("Запуск нового бота с Web App и интеграцией ARC Raiders...")
 
-    # Создаём aiohttp приложение
-    app = web.Application()
-
-    # Настройка CORS
-    cors = setup(app, defaults={
-        "*": ResourceOptions(
-            allow_credentials=True,
-            expose_headers="*",
-            allow_headers="*",
-            allow_methods=["*"],
-        )
-    })
-
+    # Создаём aiohttp приложение с middleware
+    app = web.Application(middlewares=[cors_middleware])
+    
     # Добавляем маршруты
     app.router.add_get('/api/user_events', get_user_events)
     app.router.add_post('/api/register_streamer', register_streamer)
 
     runner = web.AppRunner(app)
     await runner.setup()
-
+    
     # Получаем порт из переменной окружения (Amvera использует PORT)
     port = int(os.getenv("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
@@ -403,7 +393,6 @@ async def main():
     # Запускаем бота
     await dp.start_polling(bot)
     await runner.cleanup()
-
 
 if __name__ == '__main__':
     try:
