@@ -17,7 +17,7 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не найден в .env файле")
 
 WEB_APP_URL = "https://silovik77.github.io/bot_web/"
-STREAMERS_FILE = "/data/streamers.json"  # Сохраняем в persistent storage
+STREAMERS_FILE = "/data/streamers.json"  # Используем persistent storage
 
 # --- Настройка логирования ---
 logging.basicConfig(level=logging.INFO)
@@ -49,7 +49,7 @@ async def get_twitch_access_token(session: ClientSession):
                 data = await response.json()
                 return data['access_token']
             else:
-                logger.error(f"Ошибка получения токена Twitch: {response.status} {await response.text()}")
+                logger.error(f"Ошибка получения токена Twitch: {response.status}")
                 return None
     except Exception as e:
         logger.error(f"Исключение при получении токена Twitch: {e}")
@@ -72,7 +72,7 @@ async def is_stream_live(session: ClientSession, twitch_username):
                 data = await response.json()
                 return len(data['data']) > 0
             else:
-                logger.error(f"Ошибка запроса к Twitch API: {response.status} {await response.text()}")
+                logger.error(f"Ошибка запроса к Twitch API: {response.status}")
                 return False
     except Exception as e:
         logger.error(f"Исключение при запросе к Twitch API: {e}")
@@ -345,11 +345,6 @@ async def check_streams_task():
     while True:
         try:
             streamers = load_streamers()
-            if not streamers:
-                logger.info("Нет зарегистрированных стримеров.")
-                await asyncio.sleep(60)
-                continue
-
             async with ClientSession() as session:
                 for user_id, data in streamers.items():
                     channel_id = data.get('channel_id')
@@ -364,41 +359,43 @@ async def check_streams_task():
                                     text=f"🔴 <b>Стрим начался!</b>\n\nПрисоединяйтесь: {twitch_url}",
                                     parse_mode='HTML'
                                 )
-                                logger.info(f"✅ Уведомление отправлено в канал {channel_id}")
+                                logger.info(f"Уведомление отправлено в канал {channel_id}")
                             except Exception as e:
-                                logger.error(f"❌ Ошибка отправки уведомления: {e}")
+                                logger.error(f"Ошибка при отправке уведомления: {e}")
             
             await asyncio.sleep(60) # Проверяем каждые 60 секунд
             
         except Exception as e:
-            logger.error(f"❌ Ошибка в фоновой задаче: {e}")
+            logger.error(f"Ошибка в фоновой задаче: {e}")
             await asyncio.sleep(60)
+
+# --- Эндпоинт для проверки состояния ---
+async def health(request):
+    return web.json_response({"status": "ok"})
 
 # --- Основная функция запуска ---
 async def main():
-    logger.info("🚀 Запуск Telegram-бота и веб-сервера...")
+    logger.info("Запуск Telegram-бота и веб-сервера...")
 
     # Создаём aiohttp приложение
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_get('/api/user_events', get_user_events)
     app.router.add_post('/api/register_streamer', register_streamer)
-    app.router.add_get('/health', lambda r: web.json_response({"status": "ok"}))
+    app.router.add_get('/health', health)  # ← Исправлено: функция 'health' теперь определена
 
     runner = web.AppRunner(app)
     await runner.setup()
     
-    # Получаем порт из переменной окружения (Amvera использует PORT)
-    port = int(os.getenv("PORT", 80))
+    # Amvera: слушаем порт 80
+    port = 80
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    logger.info(f"✅ Веб-сервер запущен на http://0.0.0.0:{port}")
+    logger.info(f"Веб-сервер запущен на http://0.0.0.0:{port}")
 
-    # 🔑 ЗАПУСКАЕМ ФОННУЮ ЗАДАЧУ проверки стримов
-    logger.info("✅ Запускаем фоновую задачу проверки стримов (каждую минуту)...")
+    # Запускаем фоновую задачу
     asyncio.create_task(check_streams_task())
 
     # Запускаем бота
-    logger.info("✅ Запускаем Telegram-бота...")
     await dp.start_polling(bot)
     await runner.cleanup()
 
@@ -406,4 +403,4 @@ if __name__ == '__main__':
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("🛑 Бот остановлен пользователем.")
+        logger.info("Бот остановлен пользователем.")
