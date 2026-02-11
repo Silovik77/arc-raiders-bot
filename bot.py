@@ -17,7 +17,7 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не найден в .env файле")
 
 WEB_APP_URL = "https://silovik77.github.io/bot_web/"
-STREAMERS_FILE = "/data/streamers.json"  # Используем persistent storage
+STREAMERS_FILE = "/data/streamers.json"
 
 # --- Настройка логирования ---
 logging.basicConfig(level=logging.INFO)
@@ -381,7 +381,7 @@ async def main():
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_get('/api/user_events', get_user_events)
     app.router.add_post('/api/register_streamer', register_streamer)
-    app.router.add_get('/health', health)  # ← Исправлено: функция 'health' теперь определена
+    app.router.add_get('/health', health)  # ← Теперь 'health' определена выше
 
     runner = web.AppRunner(app)
     await runner.setup()
